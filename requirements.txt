@@ -1,2 +1,7 @@
-fastapi==0.100.0
-hypercorn==0.14.4
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.5.0
+langchain==0.1.0
+langchain-anthropic==0.1.0
+langgraph==0.0.26
+typing-extensions==4.8.0
