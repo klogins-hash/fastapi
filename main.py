@@ -374,7 +374,7 @@ if __name__ == "__main__":
     print("🛡️  Authentication: Bearer token required for /v1/chat/completions")
     
     # Railway-optimized configuration
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
     uvicorn.run(
         app,
         host="0.0.0.0",
