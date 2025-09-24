@@ -14,7 +14,7 @@ import secrets
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolExecutor
+from langgraph.prebuilt.tool_executor import ToolExecutor
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from typing_extensions import TypedDict
