@@ -739,6 +739,33 @@ async def handle_call_status(request: Request):
         logger.error(f"Call status error: {str(e)}")
         return Response(content="OK", media_type="text/plain")
 
+@app.post("/twilio/webhook/test-call-twiml")
+async def test_call_twiml(request: Request):
+    """TwiML for making test calls to debug webhook issues"""
+    try:
+        form_data = await request.form()
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Test call TwiML requested for call {call_sid}")
+        
+        # This will dial one of your Twilio numbers to test the webhook
+        twiml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">This is a webhook test call. I will now connect you to your Twilio number to test if Pepper Potts is working correctly.</Say>
+    <Dial>+18555722404</Dial>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Test call completed. Check if you heard Pepper Potts greeting.</Say>
+</Response>'''
+        
+        return Response(content=twiml_content, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Test call TwiML error: {str(e)}")
+        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Test call error occurred.</Say>
+</Response>'''
+        return Response(content=error_twiml, media_type="application/xml")
+
 if __name__ == "__main__":
     # Check for required API keys
     if not os.getenv("ANTHROPIC_API_KEY"):
