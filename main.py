@@ -474,20 +474,24 @@ async def handle_incoming_call(request: Request):
         
         logger.info(f"Incoming call from {caller_number} to {twilio_number}, Call SID: {call_sid}")
         
-        # Create TwiML response with ULTRA-PREMIUM Deepgram + Cartesia integration
+        # Create TwiML response with PREMIUM voice and FALLBACK to Twilio speech recognition
         twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna-Neural" language="en-US">Hello! You've reached Pepper Potts, your Strategic AI Partner. I'm here to challenge your thinking and help you make better business decisions. I'm using advanced speech recognition, so please speak naturally about your strategic challenges.</Say>
-    <Record 
-        action="/twilio/webhook/process-deepgram-audio"
+    <Say voice="Polly.Joanna-Neural" language="en-US">Hello! You've reached Pepper Potts, your Strategic AI Partner. I'm here to challenge your thinking and help you make better business decisions. Please speak your strategic challenge after the beep.</Say>
+    <Gather 
+        action="/twilio/webhook/process-speech-premium" 
         method="POST"
-        maxLength="60"
-        timeout="5"
-        playBeep="true"
-        recordingStatusCallback="/twilio/webhook/recording-status"
-        recordingStatusCallbackMethod="POST"
-    />
-    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't receive your recording. You can try calling again or press 0 to speak with someone. Thank you!</Say>
+        input="speech"
+        speechModel="experimental_conversations"
+        speechTimeout="auto"
+        timeout="30"
+        language="en-US"
+        profanityFilter="false"
+        hints="business strategy, marketing, pricing, competition, revenue, growth, decision, planning, consulting, coaching, ADHD, entrepreneur, solopreneur, challenge, opportunity, risk, analysis"
+    >
+        <Say voice="Polly.Joanna-Neural" language="en-US">Please speak now about your strategic challenge or business question.</Say>
+    </Gather>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't catch your question. Thank you for calling Pepper Potts Strategic AI!</Say>
 </Response>'''
         
         return Response(content=twiml_content, media_type="application/xml")
@@ -690,6 +694,113 @@ async def process_speech_redirect(request: Request):
 </Response>'''
     
     return Response(content=twiml_content, media_type="application/xml")
+
+@app.post("/twilio/webhook/process-speech-premium")
+async def process_speech_premium(request: Request):
+    """Premium speech processing with Twilio's best speech recognition + Pepper's strategic AI"""
+    try:
+        form_data = await request.form()
+        speech_result = form_data.get("SpeechResult", "")
+        confidence = float(form_data.get("Confidence", "0.0"))
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Premium speech from call {call_sid}: '{speech_result}' (confidence: {confidence})")
+        
+        # Handle low confidence with intelligent retry
+        if not speech_result or confidence < 0.4:
+            retry_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't catch that clearly. Let me try again - please speak a bit more slowly about your strategic challenge or business question.</Say>
+    <Gather 
+        action="/twilio/webhook/process-speech-premium" 
+        method="POST"
+        input="speech"
+        speechModel="experimental_conversations"
+        speechTimeout="auto"
+        timeout="25"
+        language="en-US"
+        profanityFilter="false"
+        hints="business strategy, marketing, pricing, competition, revenue, growth, decision, planning, consulting, coaching, challenge, opportunity, risk"
+    >
+        <Say voice="Polly.Joanna-Neural" language="en-US">Please try again - what strategic challenge can I help you with?</Say>
+    </Gather>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for trying. Feel free to call back anytime for strategic guidance!</Say>
+</Response>'''
+            return Response(content=retry_twiml, media_type="application/xml")
+        
+        # Process with Pepper Strategic Agent
+        try:
+            pepper_agent = get_pepper()
+            
+            # Add strategic context markers for better processing
+            enhanced_input = speech_result
+            
+            # Detect decision requests
+            decision_keywords = ['should i', 'thinking of', 'planning to', 'considering', 'what do you think']
+            if any(keyword in speech_result.lower() for keyword in decision_keywords):
+                enhanced_input += " [STRATEGIC DECISION REQUEST]"
+            
+            # Detect business context
+            business_keywords = ['business', 'marketing', 'pricing', 'revenue', 'growth', 'strategy']
+            found_business_terms = [kw for kw in business_keywords if kw in speech_result.lower()]
+            if found_business_terms:
+                enhanced_input += f" [BUSINESS CONTEXT: {', '.join(found_business_terms)}]"
+            
+            agent_response = pepper_agent.generate_strategic_response(enhanced_input)
+            
+        except Exception as agent_error:
+            logger.error(f"Pepper processing error: {str(agent_error)}")
+            agent_response = "I'm having a strategic processing moment. Let me give you a quick strategic perspective on what you shared."
+        
+        # Optimize response for voice delivery
+        if len(agent_response) > 600:
+            sentences = agent_response.split('. ')
+            agent_response = '. '.join(sentences[:8]) + "."
+            if not agent_response.endswith('?'):
+                agent_response += " What's your take on this analysis?"
+        
+        # Create premium TwiML response with better voice and conversation flow
+        twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">{agent_response}</Say>
+    <Pause length="2"/>
+    <Gather 
+        action="/twilio/webhook/process-speech-premium" 
+        method="POST"
+        input="speech"
+        speechModel="experimental_conversations"
+        speechTimeout="auto"
+        timeout="30"
+        language="en-US"
+        profanityFilter="false"
+        hints="business strategy, marketing, pricing, competition, revenue, growth, decision, planning, consulting, coaching, challenge, opportunity, risk, follow up, question, more, continue"
+    >
+        <Say voice="Polly.Joanna-Neural" language="en-US">Do you have a follow-up question or another strategic challenge to discuss?</Say>
+    </Gather>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for this strategic session with Pepper Potts. Remember to validate your assumptions and think bigger. Have a successful day!</Say>
+</Response>'''
+        
+        return Response(content=twiml_content, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Premium speech processing error: {str(e)}")
+        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I encountered a technical issue. Let me try a different approach - what strategic challenge are you facing?</Say>
+    <Gather 
+        action="/twilio/webhook/process-speech-premium" 
+        method="POST"
+        input="speech"
+        speechModel="phone_call"
+        speechTimeout="auto"
+        timeout="20"
+        language="en-US"
+    >
+        <Say voice="Polly.Joanna-Neural" language="en-US">Please speak now.</Say>
+    </Gather>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for calling Pepper Potts Strategic AI.</Say>
+</Response>'''
+        return Response(content=error_twiml, media_type="application/xml")
 
 @app.post("/twilio/webhook/voice-fallback")
 async def voice_fallback(request: Request):
