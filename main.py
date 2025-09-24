@@ -517,10 +517,27 @@ async def process_deepgram_audio(request: Request):
 </Response>'''
             return Response(content=error_twiml, media_type="application/xml")
         
-        # Download the audio file from Twilio
+        # Download the audio file from Twilio with authentication
         import httpx
+        import base64
+        
+        # Get Twilio credentials
+        twilio_account_sid = os.getenv("TWILIO_ACCOUNT_SID")
+        twilio_auth_token = os.getenv("TWILIO_AUTH_TOKEN")
+        
+        if not twilio_account_sid or not twilio_auth_token:
+            raise Exception("Twilio credentials not found in environment variables")
+        
+        # Create basic auth header
+        auth_string = f"{twilio_account_sid}:{twilio_auth_token}"
+        auth_bytes = auth_string.encode('ascii')
+        auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+        
         async with httpx.AsyncClient() as client:
-            audio_response = await client.get(recording_url)
+            audio_response = await client.get(
+                recording_url,
+                headers={"Authorization": f"Basic {auth_b64}"}
+            )
             if audio_response.status_code != 200:
                 raise Exception(f"Failed to download audio: {audio_response.status_code}")
             
