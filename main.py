@@ -12,6 +12,10 @@ import os
 from datetime import datetime
 import logging
 import secrets
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END
