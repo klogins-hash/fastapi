@@ -3,7 +3,8 @@ Basic LangGraph Agent for Railway Deployment
 Simple FastAPI + LangGraph agent with Vapi compatibility
 """
 
-from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi import FastAPI, HTTPException, Depends, Header, Request
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import uvicorn
@@ -247,6 +248,101 @@ async def test_agent(message: dict):
 def generate_api_key():
     """Generate a secure API key for production use"""
     return secrets.token_urlsafe(32)
+
+# Twilio webhook endpoints for incoming calls
+@app.post("/twilio/webhook/incoming-call")
+async def handle_incoming_call(request: Request):
+    """Handle incoming voice calls and connect to LangGraph agent"""
+    try:
+        # Get form data from Twilio webhook
+        form_data = await request.form()
+        caller_number = form_data.get("From", "Unknown")
+        twilio_number = form_data.get("To", "Unknown")
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Incoming call from {caller_number} to {twilio_number}, Call SID: {call_sid}")
+        
+        # Create TwiML response that greets caller and processes speech
+        twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Hello! You've reached the FastAPI LangGraph Agent. I'm here to help you. Please speak your question after the beep.</Say>
+    <Gather 
+        action="/twilio/webhook/process-speech" 
+        method="POST"
+        input="speech"
+        speechTimeout="5"
+        timeout="15"
+    >
+        <Say voice="alice">Please speak now.</Say>
+    </Gather>
+    <Say voice="alice">Thank you for calling. Goodbye!</Say>
+</Response>'''
+        
+        return Response(content=twiml_content, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Incoming call webhook error: {str(e)}")
+        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Sorry, there was an error. Please try again later.</Say>
+</Response>'''
+        return Response(content=error_twiml, media_type="application/xml")
+
+@app.post("/twilio/webhook/process-speech")
+async def process_speech(request: Request):
+    """Process speech input and generate agent response"""
+    try:
+        form_data = await request.form()
+        speech_result = form_data.get("SpeechResult", "")
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Speech from call {call_sid}: {speech_result}")
+        
+        if not speech_result:
+            twiml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">I didn't catch that. Thank you for calling!</Say>
+</Response>'''
+            return Response(content=twiml_content, media_type="application/xml")
+        
+        # Process with LangGraph agent
+        try:
+            agent_state = AgentState(
+                messages=[HumanMessage(content=speech_result)],
+                next="agent"
+            )
+            result = agent_node(agent_state)
+            
+            if result["messages"] and len(result["messages"]) > 1:
+                agent_response = result["messages"][-1].content
+            else:
+                agent_response = "I'm here to help, but didn't generate a proper response."
+                
+        except Exception as agent_error:
+            logger.error(f"Agent processing error: {str(agent_error)}")
+            agent_response = "I'm experiencing technical difficulties right now."
+        
+        # Limit response length for voice
+        if len(agent_response) > 400:
+            agent_response = agent_response[:400] + "..."
+        
+        # Create TwiML response with agent's answer
+        twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">{agent_response}</Say>
+    <Pause length="1"/>
+    <Say voice="alice">Thank you for using the LangGraph agent. Have a great day!</Say>
+</Response>'''
+        
+        return Response(content=twiml_content, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Speech processing error: {str(e)}")
+        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">I'm sorry, I encountered an error. Thank you for calling.</Say>
+</Response>'''
+        return Response(content=error_twiml, media_type="application/xml")
 
 if __name__ == "__main__":
     # Check for required API keys
