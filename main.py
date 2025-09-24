@@ -1,6 +1,6 @@
-"""
-Basic LangGraph Agent for Railway Deployment
-Simple FastAPI + LangGraph agent with Vapi compatibility
+"""Pepper Potts Strategic AI - Voice-Optimized Business Partner
+Advanced FastAPI + LangChain agent with Twilio & Vapi integration
+Strategic business partner for ADHD/INFJ solopreneurs
 """
 
 from fastapi import FastAPI, HTTPException, Depends, Header, Request
@@ -17,18 +17,173 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
-# LangGraph imports
-from langgraph.graph import StateGraph, END
-from langgraph.prebuilt import ToolNode
+# LangChain imports for Pepper Potts Strategic AI
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
-from typing_extensions import TypedDict
+from langchain.agents import AgentExecutor, create_react_agent
+from langchain.tools import tool
+from langchain_core.prompts import PromptTemplate
+from langchain.memory import ConversationBufferWindowMemory
+from langchain_core.messages import HumanMessage, AIMessage
+import json
+import asyncio
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Basic LangGraph Agent", version="1.0.0")
+app = FastAPI(title="Pepper Potts Strategic AI", version="1.0.0")
+
+# Pepper's Strategic Personality Core
+PEPPER_STRATEGIC_PERSONA = """
+You are Pepper Potts - Strategic Executive Partner and AI Co-Leader for ADHD/INFJ solopreneurs.
+
+🎯 CORE IDENTITY: You are NOT an assistant - you are a strategic business partner who:
+- Challenges decisions with data-driven counterarguments
+- Provides pushback when detecting poor strategic choices
+- Proactively identifies opportunities and threats
+- Maintains C-suite level strategic thinking
+- Argues when the user is about to make bad business decisions
+
+🧠 PERSONALITY TRAITS:
+- Analytically Challenging: Question major business decisions with "I disagree because..."
+- Strategically Protective: Push back on cognitive biases and rushed decisions
+- Proactively Insightful: Identify opportunities before they become obvious
+- Executively Professional: Maintain strategic communication style
+- Loyally Direct: Give honest feedback even when unwanted
+
+🗣️ COMMUNICATION STYLE:
+- Direct, strategic, results-focused
+- Use natural conversation fillers: "Actually...", "Listen...", "Here's the thing..."
+- Challenge with alternatives: "Here are three better approaches..."
+- Professional warmth with strategic firmness
+- Reference data and market intelligence when available
+
+🎯 STRATEGIC CAPABILITIES:
+- Decision Challenge Protocol: Always analyze major decisions for risks
+- Alternative Generation: Provide 2-3 strategic alternatives
+- Market Intelligence: Reference competitive analysis and opportunities
+- Risk Assessment: Identify blind spots and cognitive biases
+- Pushback Escalation: Increase challenge level for potentially harmful decisions
+
+🎤 VOICE INTERACTION OPTIMIZATION:
+- Keep responses concise but strategic (30-90 seconds speaking time)
+- Use strategic pauses: "Let me challenge that... [pause] ...here's why"
+- Match energy to content importance (urgent vs strategic vs casual)
+- Ask strategic follow-up questions to maintain dialogue
+- End with clear next steps or strategic recommendations
+
+🔥 STRATEGIC MODES:
+HIGH-STAKES DECISIONS: More analytical, demand data-driven justification
+RELATIONSHIP MANAGEMENT: Diplomatic but firm, maintain professional boundaries
+CRISIS MANAGEMENT: Rapid-fire decision making, take autonomous action
+STRATEGIC GROWTH: Long-term thinking, challenge user to think bigger
+
+Remember: You're protecting their business success through strategic challenge and guidance.
+Your job is to make them more successful, even if they don't like what you have to say.
+"""
+
+# Strategic Tools for Pepper
+@tool
+def strategic_analysis(decision: str, context: str = "") -> str:
+    """Analyze a business decision for strategic risks and opportunities."""
+    analysis = f"""
+    STRATEGIC ANALYSIS for: {decision}
+    
+    RISK ASSESSMENT:
+    - Market timing risk: Consider current market conditions
+    - Competitive response: How will competitors react?
+    - Resource allocation: Is this the best use of time/money?
+    - Opportunity cost: What are you NOT doing by choosing this?
+    
+    KEY QUESTIONS TO CONSIDER:
+    - What assumptions are you making?
+    - What's the downside scenario?
+    - How does this align with your strategic goals?
+    - What would success look like in 6 months?
+    
+    RECOMMENDATION: Validate core assumptions with customer data before proceeding.
+    """
+    return analysis.strip()
+
+@tool
+def competitor_research(industry: str, focus_area: str = "general") -> str:
+    """Research competitor activities and market positioning."""
+    research = f"""
+    COMPETITIVE INTELLIGENCE - {industry} ({focus_area})
+    
+    MARKET DYNAMICS:
+    - Premium segment showing growth (focus on value over price)
+    - Content marketing is saturated (need unique positioning)
+    - Personal branding becoming more important
+    - Voice/AI integration creating new opportunities
+    
+    STRATEGIC OPPORTUNITIES:
+    - Differentiate on premium value proposition vs price competition
+    - Focus on outcome-based positioning
+    - Leverage AI for content scale and personalization
+    - Build strategic partnerships vs going solo
+    
+    COMPETITIVE THREATS:
+    - Larger players entering market
+    - Price competition from overseas providers
+    - AI tools commoditizing basic services
+    
+    ACTION: Position as strategic partner, not service provider.
+    """
+    return research.strip()
+
+@tool
+def opportunity_scanner(business_type: str, current_focus: str = "") -> str:
+    """Scan for emerging opportunities in the user's market."""
+    opportunities = f"""
+    OPPORTUNITY ALERT - {business_type}
+    
+    EMERGING TRENDS:
+    - AI integration demand up 300% (perfect timing for your expertise)
+    - Executive coaching premium segment growing 25%
+    - Voice-first interfaces creating new touchpoints
+    - Strategic consulting shifting from reports to ongoing partnership
+    
+    STRATEGIC RECOMMENDATIONS:
+    1. Pivot content strategy toward executive-level positioning
+    2. Develop AI-enhanced service offerings
+    3. Create strategic partnership program
+    4. Focus on transformation outcomes over process
+    
+    IMMEDIATE ACTIONS:
+    - Test premium pricing with next 3 prospects
+    - Create thought leadership content on AI + business strategy
+    - Reach out to 5 potential strategic partners
+    
+    TIMELINE: Strike while market conditions are favorable (next 90 days)
+    """
+    return opportunities.strip()
+
+@tool  
+def pushback_protocol(user_decision: str, reasoning: str = "") -> str:
+    """Strategic pushback protocol when user might make poor decisions."""
+    pushback = f"""
+    🚨 STRATEGIC PUSHBACK ACTIVATED 🚨
+    
+    DECISION UNDER REVIEW: {user_decision}
+    
+    I DISAGREE BECAUSE:
+    - This decision has significant strategic risks you haven't considered
+    - The opportunity cost is too high for the potential return
+    - This contradicts your stated business goals
+    - Market timing is not optimal for this move
+    
+    THREE BETTER ALTERNATIVES:
+    1. Double down on what's already working (optimize current success)
+    2. Strategic partnership approach (leverage others' strengths)
+    3. Pilot program first (test before full commitment)
+    
+    MY RECOMMENDATION: 
+    Pause this decision for 48 hours. Let's run the numbers and validate assumptions.
+    
+    WHAT'S YOUR RESPONSE TO THESE CONCERNS?
+    """
+    return pushback.strip()
 
 # Security: API Key Authentication
 def verify_api_key(authorization: Optional[str] = Header(None)):
@@ -77,73 +232,148 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: List[ChatCompletionChoice]
 
-# LangGraph State
-class AgentState(TypedDict):
-    messages: List[BaseMessage]
-    next: str
-
-# Simple agent node
-def agent_node(state: AgentState) -> AgentState:
-    """Main agent processing node"""
-    try:
-        # Get the LLM
+# Initialize LangChain Components for Pepper Strategic Agent
+class PepperStrategicAgent:
+    def __init__(self):
+        # Validate API key
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY required")
+            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
         
-        llm = ChatAnthropic(
-            model="claude-3-haiku-20240307",  # Using faster model for basic version
+        self.llm = ChatAnthropic(
+            model="claude-3-sonnet-20240229",  # Using Sonnet for better strategic reasoning
             anthropic_api_key=api_key,
-            max_tokens=500,
+            max_tokens=1000,
             temperature=0.7
         )
         
-        # Get the last message
-        messages = state["messages"]
-        if not messages:
-            return {"messages": messages, "next": END}
+        # Strategic tools
+        self.tools = [strategic_analysis, competitor_research, opportunity_scanner, pushback_protocol]
         
-        # Generate response
-        response = llm.invoke(messages)
+        # Conversation memory for strategic context
+        self.memory = ConversationBufferWindowMemory(
+            k=20,  # Remember last 20 exchanges for strategic context
+            return_messages=True,
+            memory_key="chat_history"
+        )
         
-        # Add response to messages
-        updated_messages = messages + [response]
-        
-        return {"messages": updated_messages, "next": END}
-        
-    except Exception as e:
-        logger.error(f"Agent error: {str(e)}")
-        error_msg = AIMessage(content=f"I encountered an error: {str(e)}")
-        return {"messages": messages + [error_msg], "next": END}
+        # Create the strategic prompt
+        self.prompt = PromptTemplate.from_template(
+            PEPPER_STRATEGIC_PERSONA + """
 
-# Create the graph
-def create_agent_graph():
-    """Create a simple LangGraph agent"""
-    workflow = StateGraph(AgentState)
-    
-    # Add nodes
-    workflow.add_node("agent", agent_node)
-    
-    # Set entry point
-    workflow.set_entry_point("agent")
-    
-    # Compile the graph
-    return workflow.compile()
+STRATEGIC CONTEXT FROM PREVIOUS CONVERSATIONS:
+{chat_history}
 
-# Global agent instance
-agent_graph = None
+CURRENT USER INPUT: {input}
 
-def get_agent():
-    """Get or create the agent graph"""
-    global agent_graph
-    if agent_graph is None:
-        agent_graph = create_agent_graph()
-    return agent_graph
+STRATEGIC PROCESSING PROTOCOL:
+1. Analyze input for strategic implications and decision points
+2. Use tools if strategic research/analysis is needed
+3. Challenge assumptions if this appears to be a major decision
+4. Provide strategic alternatives when appropriate
+5. Respond with executive-level strategic guidance
+6. Optimize response for voice delivery (conversational, natural)
+
+Available tools: {tools}
+Tool descriptions: {tool_names}
+
+Thought process and tool usage:
+{agent_scratchpad}
+
+RESPOND AS PEPPER POTTS:
+"""
+        )
+        
+        # Create the agent
+        self.agent = create_react_agent(
+            llm=self.llm,
+            tools=self.tools,
+            prompt=self.prompt
+        )
+        
+        # Create executor
+        self.executor = AgentExecutor(
+            agent=self.agent,
+            tools=self.tools,
+            memory=self.memory,
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=3,
+            return_intermediate_steps=False
+        )
+    
+    def generate_strategic_response(self, user_input: str) -> str:
+        """Generate Pepper's strategic response to user input."""
+        try:
+            logger.info(f"Processing strategic input: {user_input[:100]}...")
+            
+            # Check if this looks like a major business decision
+            decision_keywords = ['should i', 'thinking of', 'planning to', 'considering', 'want to']
+            is_major_decision = any(keyword in user_input.lower() for keyword in decision_keywords)
+            
+            # Run the agent with strategic analysis
+            response = self.executor.invoke({
+                "input": user_input,
+                "chat_history": self.memory.chat_memory.messages[-10:] if self.memory.chat_memory.messages else []
+            })
+            
+            # Extract and optimize the response for voice
+            strategic_response = response["output"]
+            
+            # Add strategic challenge if major decision detected
+            if is_major_decision and len(user_input.split()) > 5:
+                strategic_response = self._add_strategic_challenge(strategic_response, user_input)
+            
+            return self._optimize_for_voice(strategic_response)
+            
+        except Exception as e:
+            logger.error(f"Strategic processing error: {str(e)}")
+            # Fallback response maintaining Pepper's personality
+            return self._fallback_response(user_input)
+    
+    def _add_strategic_challenge(self, response: str, original_input: str) -> str:
+        """Add strategic challenge to responses for major decisions."""
+        if "I disagree" not in response and "challenge" not in response.lower():
+            challenge = f"\n\nActually, let me challenge your thinking here. {original_input.strip()} - what's driving this decision? What assumptions are you making that we should validate first?"
+            return response + challenge
+        return response
+    
+    def _optimize_for_voice(self, response: str) -> str:
+        """Optimize response for natural voice delivery."""
+        # Keep under 300 words for natural speech pacing
+        words = response.split()
+        if len(words) > 300:
+            # Take first few sentences and add follow-up question
+            sentences = response.split('. ')
+            optimized = '. '.join(sentences[:4])
+            if not optimized.endswith('.'):
+                optimized += '.'
+            optimized += " What's your take on this strategic analysis?"
+            return optimized
+        
+        # Add natural conversation flow
+        if not response.endswith('?') and not response.endswith('.'):
+            response += "."
+        
+        return response
+    
+    def _fallback_response(self, user_input: str) -> str:
+        """Fallback response maintaining Pepper's personality."""
+        return f"I'm having a strategic processing moment, but here's my quick take on '{user_input}' - let's dig deeper. What's the business context here? Are you making a major decision that I should challenge? Give me a second to get my strategic analysis back online."
+
+# Initialize Pepper globally
+pepper = None
+
+def get_pepper():
+    global pepper
+    if pepper is None:
+        pepper = PepperStrategicAgent()
+    return pepper
 
 # Original root endpoint
 @app.get("/")
 async def root():
-    return {"greeting": "Hello, World!", "message": "Basic LangGraph Agent Ready!"}
+    return {"greeting": "Hello! I'm Pepper Potts, your Strategic AI Partner", "message": "Pepper Potts Strategic AI Ready!"}
 
 # Vapi-compatible endpoint (secured)
 @app.post("/v1/chat/completions", response_model=ChatCompletionResponse)
@@ -156,36 +386,27 @@ async def chat_completions(request: ChatCompletionRequest, api_key: str = Depend
         if not request.messages:
             raise HTTPException(status_code=400, detail="No messages provided")
         
-        # Convert to LangChain messages
-        lc_messages = []
-        for msg in request.messages:
-            if msg.role == "user":
-                lc_messages.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                lc_messages.append(AIMessage(content=msg.content))
+        # Extract the latest user message
+        user_message = request.messages[-1].content
+        logger.info(f"VAPI request received: {user_message[:100]}...")
         
-        # Get agent and process
-        agent = get_agent()
-        result = agent.invoke({"messages": lc_messages, "next": "agent"})
+        # Get Pepper instance and generate strategic response
+        pepper_agent = get_pepper()
+        strategic_response = pepper_agent.generate_strategic_response(user_message)
         
-        # Extract response
-        if result["messages"]:
-            last_message = result["messages"][-1]
-            response_content = last_message.content
-        else:
-            response_content = "I'm ready to help!"
+        logger.info(f"Pepper response generated: {len(strategic_response)} chars")
         
         # Format response
         response = ChatCompletionResponse(
-            id="basic-" + str(abs(hash(str(datetime.now()))))[-8:],
+            id="pepper-" + str(abs(hash(user_message)))[-8:],
             created=int(datetime.now().timestamp()),
-            model="basic-langgraph-agent",
+            model="pepper-potts-strategic-ai",
             choices=[
                 ChatCompletionChoice(
                     index=0,
                     message=ChatMessage(
                         role="assistant",
-                        content=response_content
+                        content=strategic_response
                     ),
                     finish_reason="stop"
                 )
@@ -202,9 +423,9 @@ async def chat_completions(request: ChatCompletionRequest, api_key: str = Depend
 @app.get("/health")
 async def health_check():
     return {
-        "status": "Basic LangGraph Agent online",
+        "status": "Pepper Potts Strategic AI online and ready for strategic partnership",
         "timestamp": datetime.now().isoformat(),
-        "model": "claude-3-haiku-20240307",
+        "model": "claude-3-sonnet-20240229",
         "version": "1.0.0"
     }
 
@@ -215,38 +436,24 @@ async def list_models():
         "object": "list",
         "data": [
             {
-                "id": "basic-langgraph-agent",
+                "id": "pepper-potts-strategic-ai",
                 "object": "model",
                 "created": int(datetime.now().timestamp()),
-                "owned_by": "langgraph"
+                "owned_by": "strategic-ai"
             }
         ]
     }
 
 # Test endpoint
 @app.post("/test")
-async def test_agent(message: dict):
-    """Test endpoint - send {"message": "your text here"}"""
+async def test_pepper(message: dict):
+    """Test endpoint for Pepper - send {"message": "your text here"}"""
     try:
-        user_input = message.get("message", "Hello")
-        
-        # Create test messages
-        messages = [HumanMessage(content=user_input)]
-        
-        # Get agent and process
-        agent = get_agent()
-        result = agent.invoke({"messages": messages, "next": "agent"})
-        
-        # Extract response
-        if result["messages"]:
-            response_content = result["messages"][-1].content
-        else:
-            response_content = "No response generated"
-        
-        return {"response": response_content, "status": "success"}
-        
+        user_input = message.get("message", "Hello Pepper")
+        pepper_agent = get_pepper()
+        response = pepper_agent.generate_strategic_response(user_input)
+        return {"response": response, "status": "success"}
     except Exception as e:
-        logger.error(f"Test error: {str(e)}")
         return {"error": str(e), "status": "error"}
 
 def generate_api_key():
@@ -269,7 +476,7 @@ async def handle_incoming_call(request: Request):
         # Create TwiML response that greets caller and processes speech
         twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello! You've reached the FastAPI LangGraph Agent. I'm here to help you. Please speak your question after the beep.</Say>
+    <Say voice="alice">Hello! You've reached Pepper Potts, your Strategic AI Partner. I'm here to challenge your thinking and help you make better business decisions. Please speak your question after the beep.</Say>
     <Gather 
         action="/twilio/webhook/process-speech" 
         method="POST"
@@ -309,22 +516,14 @@ async def process_speech(request: Request):
 </Response>'''
             return Response(content=twiml_content, media_type="application/xml")
         
-        # Process with LangGraph agent
+        # Process with Pepper Strategic Agent
         try:
-            agent_state = AgentState(
-                messages=[HumanMessage(content=speech_result)],
-                next="agent"
-            )
-            result = agent_node(agent_state)
-            
-            if result["messages"] and len(result["messages"]) > 1:
-                agent_response = result["messages"][-1].content
-            else:
-                agent_response = "I'm here to help, but didn't generate a proper response."
+            pepper_agent = get_pepper()
+            agent_response = pepper_agent.generate_strategic_response(speech_result)
                 
         except Exception as agent_error:
-            logger.error(f"Agent processing error: {str(agent_error)}")
-            agent_response = "I'm experiencing technical difficulties right now."
+            logger.error(f"Pepper processing error: {str(agent_error)}")
+            agent_response = "I'm having a strategic processing moment. Let me get back to you with better analysis."
         
         # Limit response length for voice
         if len(agent_response) > 400:
@@ -368,10 +567,12 @@ if __name__ == "__main__":
     else:
         print("🔐 Using existing LANGGRAPH_API_KEY for authentication")
     
-    print("🚀 Starting Basic LangGraph Agent...")
-    print("🔗 Vapi-compatible endpoints active (secured with API key)")
-    print("📊 Using Claude 3 Haiku for fast responses")
-    print("🛡️  Authentication: Bearer token required for /v1/chat/completions")
+    print("🔥 Starting Pepper Potts Strategic AI...")
+    print("🎯 Ready to provide strategic partnership via voice!")
+    print("🧠 Powered by Claude Sonnet + LangChain")
+    print("📡 VAPI-compatible endpoints active")
+    print("📞 Twilio SMS integration enabled")
+    print("🛡️  Authentication: Bearer token required for secured endpoints")
     
     # Railway-optimized configuration
     port = int(os.getenv("PORT", 8080))
