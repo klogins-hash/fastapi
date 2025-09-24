@@ -26,6 +26,7 @@ from langchain.memory import ConversationBufferWindowMemory
 from langchain_core.messages import HumanMessage, AIMessage
 import json
 import asyncio
+from advanced_voice_service import get_advanced_voice_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -473,20 +474,20 @@ async def handle_incoming_call(request: Request):
         
         logger.info(f"Incoming call from {caller_number} to {twilio_number}, Call SID: {call_sid}")
         
-        # Create TwiML response that greets caller and processes speech
+        # Create TwiML response with ULTRA-PREMIUM Deepgram + Cartesia integration
         twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">Hello! You've reached Pepper Potts, your Strategic AI Partner. I'm here to challenge your thinking and help you make better business decisions. Please speak your question after the beep.</Say>
-    <Gather 
-        action="/twilio/webhook/process-speech" 
+    <Say voice="Polly.Joanna-Neural" language="en-US">Hello! You've reached Pepper Potts, your Strategic AI Partner. I'm here to challenge your thinking and help you make better business decisions. I'm using advanced speech recognition, so please speak naturally about your strategic challenges.</Say>
+    <Record 
+        action="/twilio/webhook/process-deepgram-audio"
         method="POST"
-        input="speech"
-        speechTimeout="5"
-        timeout="15"
-    >
-        <Say voice="alice">Please speak now.</Say>
-    </Gather>
-    <Say voice="alice">Thank you for calling. Goodbye!</Say>
+        maxLength="60"
+        timeout="5"
+        playBeep="true"
+        recordingStatusCallback="/twilio/webhook/recording-status"
+        recordingStatusCallbackMethod="POST"
+    />
+    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't receive your recording. You can try calling again or press 0 to speak with someone. Thank you!</Say>
 </Response>'''
         
         return Response(content=twiml_content, media_type="application/xml")
@@ -499,22 +500,190 @@ async def handle_incoming_call(request: Request):
 </Response>'''
         return Response(content=error_twiml, media_type="application/xml")
 
+@app.post("/twilio/webhook/process-deepgram-audio")
+async def process_deepgram_audio(request: Request):
+    """Process recorded audio using Deepgram Nova-2 for ultra-high-quality transcription"""
+    try:
+        form_data = await request.form()
+        recording_url = form_data.get("RecordingUrl", "")
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Processing Deepgram audio for call {call_sid}: {recording_url}")
+        
+        if not recording_url:
+            error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't receive your audio properly. Please try calling again.</Say>
+</Response>'''
+            return Response(content=error_twiml, media_type="application/xml")
+        
+        # Download the audio file from Twilio
+        import httpx
+        async with httpx.AsyncClient() as client:
+            audio_response = await client.get(recording_url)
+            if audio_response.status_code != 200:
+                raise Exception(f"Failed to download audio: {audio_response.status_code}")
+            
+            audio_data = audio_response.content
+        
+        # Get advanced voice service and transcribe with Deepgram Nova-2
+        voice_service = get_advanced_voice_service()
+        transcription_result = await voice_service.transcribe_audio(audio_data, "audio/wav")
+        
+        if not transcription_result["success"] or not transcription_result["transcript"]:
+            retry_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I had trouble understanding your audio. Let me try again - please speak clearly about your strategic challenge.</Say>
+    <Record 
+        action="/twilio/webhook/process-deepgram-audio"
+        method="POST"
+        maxLength="60"
+        timeout="5"
+        playBeep="true"
+    />
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for trying. Feel free to call back anytime!</Say>
+</Response>'''
+            return Response(content=retry_twiml, media_type="application/xml")
+        
+        transcript = transcription_result["transcript"]
+        confidence = transcription_result["confidence"]
+        
+        logger.info(f"Deepgram transcription for call {call_sid}: '{transcript}' (confidence: {confidence})")
+        
+        # Analyze speech intent for strategic context
+        intent_analysis = voice_service.analyze_speech_intent(
+            transcript, 
+            confidence, 
+            transcription_result.get("sentiment")
+        )
+        
+        # Process with Pepper Strategic Agent
+        try:
+            pepper_agent = get_pepper()
+            
+            # Add context from speech analysis
+            enhanced_input = f"{transcript}"
+            if intent_analysis["is_decision_request"]:
+                enhanced_input += " [DECISION REQUEST DETECTED]"
+            if intent_analysis["strategic_keywords"]:
+                enhanced_input += f" [STRATEGIC CONTEXT: {', '.join(intent_analysis['strategic_keywords'])}]"
+            
+            agent_response = pepper_agent.generate_strategic_response(enhanced_input)
+            
+        except Exception as agent_error:
+            logger.error(f"Pepper processing error: {str(agent_error)}")
+            agent_response = "I'm having a strategic processing moment. Let me get back to you with better analysis."
+        
+        # Determine emotional tone for Cartesia
+        emotion = "confident"
+        if intent_analysis["is_decision_request"]:
+            emotion = "challenging"
+        elif intent_analysis["urgency_level"] == "high":
+            emotion = "analytical"
+        elif len(agent_response) > 200:
+            emotion = "analytical"
+        
+        # Optimize response length for voice
+        if len(agent_response) > 500:
+            sentences = agent_response.split('. ')
+            agent_response = '. '.join(sentences[:6]) + "."
+            if not agent_response.endswith('?'):
+                agent_response += " What are your thoughts on this analysis?"
+        
+        # Create TwiML response with Cartesia-optimized voice
+        voice_service = get_advanced_voice_service()
+        say_element = await voice_service.create_twiml_with_cartesia_audio(agent_response, emotion)
+        
+        # Create follow-up conversation flow
+        twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    {say_element}
+    <Pause length="2"/>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Would you like to discuss this further or do you have another strategic challenge?</Say>
+    <Record 
+        action="/twilio/webhook/process-deepgram-audio"
+        method="POST"
+        maxLength="60"
+        timeout="8"
+        playBeep="true"
+    />
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for this strategic session with Pepper Potts. Remember to validate your assumptions and think bigger. Have a successful day!</Say>
+</Response>'''
+        
+        return Response(content=twiml_content, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Deepgram processing error: {str(e)}")
+        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I encountered a technical issue processing your request. Please try calling again.</Say>
+</Response>'''
+        return Response(content=error_twiml, media_type="application/xml")
+
+@app.post("/twilio/webhook/recording-status")
+async def handle_recording_status(request: Request):
+    """Handle recording status callbacks"""
+    try:
+        form_data = await request.form()
+        recording_status = form_data.get("RecordingStatus", "Unknown")
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Recording status for call {call_sid}: {recording_status}")
+        return Response(content="OK", media_type="text/plain")
+        
+    except Exception as e:
+        logger.error(f"Recording status error: {str(e)}")
+        return Response(content="OK", media_type="text/plain")
+
+@app.post("/twilio/webhook/partial-speech")
+async def handle_partial_speech(request: Request):
+    """Handle partial speech results for real-time feedback"""
+    try:
+        form_data = await request.form()
+        partial_result = form_data.get("PartialSpeechResult", "")
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Partial speech from call {call_sid}: {partial_result}")
+        
+        # Just acknowledge - we'll process the full result later
+        return Response(content="", media_type="text/plain")
+        
+    except Exception as e:
+        logger.error(f"Partial speech error: {str(e)}")
+        return Response(content="", media_type="text/plain")
+
 @app.post("/twilio/webhook/process-speech")
 async def process_speech(request: Request):
     """Process speech input and generate agent response"""
     try:
         form_data = await request.form()
         speech_result = form_data.get("SpeechResult", "")
+        confidence = float(form_data.get("Confidence", "0.0"))
         call_sid = form_data.get("CallSid", "Unknown")
         
-        logger.info(f"Speech from call {call_sid}: {speech_result}")
+        logger.info(f"Speech from call {call_sid}: {speech_result} (confidence: {confidence})")
         
-        if not speech_result:
-            twiml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+        # Handle low confidence or empty results with re-prompting
+        if not speech_result or confidence < 0.3:
+            retry_twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="alice">I didn't catch that. Thank you for calling!</Say>
+    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't quite catch that clearly. Let me try again - please speak a bit more slowly and clearly about your strategic challenge or business question.</Say>
+    <Gather 
+        action="/twilio/webhook/process-speech" 
+        method="POST"
+        input="dtmf speech"
+        speechModel="experimental_conversations"
+        speechTimeout="auto"
+        timeout="25"
+        language="en-US"
+        profanityFilter="false"
+        hints="business strategy, marketing, pricing, competition, revenue, growth, decision, planning, consulting, coaching, challenge, opportunity, risk"
+    >
+        <Say voice="Polly.Joanna-Neural" language="en-US">Please try again - what strategic challenge can I help you with?</Say>
+    </Gather>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for trying. Feel free to call back anytime for strategic guidance!</Say>
 </Response>'''
-            return Response(content=twiml_content, media_type="application/xml")
+            return Response(content=retry_twiml, media_type="application/xml")
         
         # Process with Pepper Strategic Agent
         try:
