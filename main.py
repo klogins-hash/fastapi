@@ -145,6 +145,9 @@ async def root():
 async def chat_completions(request: ChatCompletionRequest, api_key: str = Depends(verify_api_key)):
     """Vapi-compatible chat completions endpoint"""
     try:
+        # Log the incoming request for debugging
+        logger.info(f"Received chat completion request: {request.dict()}")
+        
         if not request.messages:
             raise HTTPException(status_code=400, detail="No messages provided")
         

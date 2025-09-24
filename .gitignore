@@ -154,7 +154,16 @@ cython_debug/
 
 # PyCharm
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
+#  project, it is recommended to ignore the files matching the following patterns:
+#  *.iws
+#  *.iml
+#  *.ipr
+
+# LangGraph Cloud specific
+.langgraph/
+*.db
+*.sqlite
+
+# End of https://www.toptal.com/developers/gitignore/api/python (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
