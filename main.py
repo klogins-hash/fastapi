@@ -691,6 +691,54 @@ async def process_speech_redirect(request: Request):
     
     return Response(content=twiml_content, media_type="application/xml")
 
+@app.post("/twilio/webhook/voice-fallback")
+async def voice_fallback(request: Request):
+    """Fallback endpoint for voice calls if main webhook fails"""
+    try:
+        form_data = await request.form()
+        call_sid = form_data.get("CallSid", "Unknown")
+        
+        logger.info(f"Voice fallback triggered for call {call_sid}")
+        
+        # Simple fallback that still uses premium pipeline
+        twiml_content = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="Polly.Joanna-Neural" language="en-US">Hello! This is Pepper Potts Strategic AI. I'm experiencing a technical moment, but I'm here to help with your strategic challenges. Please speak after the beep.</Say>
+    <Record 
+        action="/twilio/webhook/process-deepgram-audio"
+        method="POST"
+        maxLength="60"
+        timeout="5"
+        playBeep="true"
+    />
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for calling. Please try again if needed.</Say>
+</Response>'''
+        
+        return Response(content=twiml_content, media_type="application/xml")
+        
+    except Exception as e:
+        logger.error(f"Voice fallback error: {str(e)}")
+        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Say voice="alice">Sorry, there was a system error. Please try calling again.</Say>
+</Response>'''
+        return Response(content=error_twiml, media_type="application/xml")
+
+@app.post("/twilio/webhook/call-status")
+async def handle_call_status(request: Request):
+    """Handle call status updates from Twilio"""
+    try:
+        form_data = await request.form()
+        call_sid = form_data.get("CallSid", "Unknown")
+        call_status = form_data.get("CallStatus", "Unknown")
+        
+        logger.info(f"Call status update for {call_sid}: {call_status}")
+        return Response(content="OK", media_type="text/plain")
+        
+    except Exception as e:
+        logger.error(f"Call status error: {str(e)}")
+        return Response(content="OK", media_type="text/plain")
+
 if __name__ == "__main__":
     # Check for required API keys
     if not os.getenv("ANTHROPIC_API_KEY"):
