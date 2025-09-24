@@ -1,1 +1,1 @@
-web: python main.py
+web: python pepper_cartesia_app.py
