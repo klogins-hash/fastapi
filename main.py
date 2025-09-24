@@ -652,75 +652,43 @@ async def handle_partial_speech(request: Request):
         logger.error(f"Partial speech error: {str(e)}")
         return Response(content="", media_type="text/plain")
 
+# OLD TWILIO SPEECH ENDPOINT REMOVED - Using premium Deepgram+Cartesia pipeline only
 @app.post("/twilio/webhook/process-speech")
-async def process_speech(request: Request):
-    """Process speech input and generate agent response"""
-    try:
-        form_data = await request.form()
-        speech_result = form_data.get("SpeechResult", "")
-        confidence = float(form_data.get("Confidence", "0.0"))
-        call_sid = form_data.get("CallSid", "Unknown")
-        
-        logger.info(f"Speech from call {call_sid}: {speech_result} (confidence: {confidence})")
-        
-        # Handle low confidence or empty results with re-prompting
-        if not speech_result or confidence < 0.3:
-            retry_twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
+async def process_speech_redirect(request: Request):
+    """Redirect old endpoint to premium Deepgram processing"""
+    logger.info("Redirecting old speech endpoint to premium Deepgram processing")
+    
+    # Return TwiML that starts a new recording for Deepgram processing
+    twiml_content = '''<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-    <Say voice="Polly.Joanna-Neural" language="en-US">I didn't quite catch that clearly. Let me try again - please speak a bit more slowly and clearly about your strategic challenge or business question.</Say>
-    <Gather 
-        action="/twilio/webhook/process-speech" 
+    <Say voice="Polly.Joanna-Neural" language="en-US">Switching to premium voice processing. Please speak your strategic challenge after the beep.</Say>
+    <Record 
+        action="/twilio/webhook/process-deepgram-audio"
         method="POST"
-        input="dtmf speech"
-        speechModel="experimental_conversations"
-        speechTimeout="auto"
-        timeout="25"
-        language="en-US"
-        profanityFilter="false"
-        hints="business strategy, marketing, pricing, competition, revenue, growth, decision, planning, consulting, coaching, challenge, opportunity, risk"
-    >
-        <Say voice="Polly.Joanna-Neural" language="en-US">Please try again - what strategic challenge can I help you with?</Say>
-    </Gather>
-    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for trying. Feel free to call back anytime for strategic guidance!</Say>
+        maxLength="60"
+        timeout="5"
+        playBeep="true"
+    />
+    <Say voice="Polly.Joanna-Neural" language="en-US">Thank you for calling Pepper Potts Strategic AI!</Say>
 </Response>'''
-            return Response(content=retry_twiml, media_type="application/xml")
-        
-        # Process with Pepper Strategic Agent
-        try:
-            pepper_agent = get_pepper()
-            agent_response = pepper_agent.generate_strategic_response(speech_result)
-                
-        except Exception as agent_error:
-            logger.error(f"Pepper processing error: {str(agent_error)}")
-            agent_response = "I'm having a strategic processing moment. Let me get back to you with better analysis."
-        
-        # Limit response length for voice
-        if len(agent_response) > 400:
-            agent_response = agent_response[:400] + "..."
-        
-        # Create TwiML response with agent's answer
-        twiml_content = f'''<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="alice">{agent_response}</Say>
-    <Pause length="1"/>
-    <Say voice="alice">Thank you for using the LangGraph agent. Have a great day!</Say>
-</Response>'''
-        
-        return Response(content=twiml_content, media_type="application/xml")
-        
-    except Exception as e:
-        logger.error(f"Speech processing error: {str(e)}")
-        error_twiml = '''<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-    <Say voice="alice">I'm sorry, I encountered an error. Thank you for calling.</Say>
-</Response>'''
-        return Response(content=error_twiml, media_type="application/xml")
+    
+    return Response(content=twiml_content, media_type="application/xml")
 
 if __name__ == "__main__":
     # Check for required API keys
     if not os.getenv("ANTHROPIC_API_KEY"):
         print("❌ ANTHROPIC_API_KEY environment variable required")
         print("💡 Set it with: export ANTHROPIC_API_KEY='your-key-here'")
+        exit(1)
+    
+    if not os.getenv("DEEPGRAM_API_KEY"):
+        print("❌ DEEPGRAM_API_KEY environment variable required for premium speech recognition")
+        print("💡 Set it with: export DEEPGRAM_API_KEY='your-key-here'")
+        exit(1)
+    
+    if not os.getenv("CARTESIA_API_KEY"):
+        print("❌ CARTESIA_API_KEY environment variable required for premium text-to-speech")
+        print("💡 Set it with: export CARTESIA_API_KEY='your-key-here'")
         exit(1)
     
     # Check for security API key
